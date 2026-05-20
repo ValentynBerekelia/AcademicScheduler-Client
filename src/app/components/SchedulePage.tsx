@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  getCurrentWeek, getGroups, getCurrentSemester,
+  getCurrentWeek, getGroups, getCurrentSemester, getCancellations,
   CurrentWeekDto, WeekDayDto, ScheduleSlotDto,
-  UserProfile, GroupItemDto,
+  UserProfile, GroupItemDto, ClassCancellationDto,
 } from '../utils/api';
-import { Calendar, Clock, User, MapPin, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, User, MapPin, ExternalLink, ChevronLeft, ChevronRight, Printer, DoorOpen } from 'lucide-react';
 import { ProfileDropdown } from './ProfileDropdown';
+import { NotificationBell } from './NotificationBell';
+import { FreeRoomsModal } from './FreeRoomsModal';
 
 interface SchedulePageProps {
   profile: UserProfile;
@@ -81,9 +83,11 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
 }
 
-function SlotCard({ slot, isReplacement }: { slot: ScheduleSlotDto; isReplacement: boolean }) {
+function SlotCard({ slot, isReplacement, isCancelled }: { slot: ScheduleSlotDto; isReplacement: boolean; isCancelled?: boolean }) {
   const lessonType = slot.lessonType ?? '';
-  const cardClass = isReplacement
+  const cardClass = isCancelled
+    ? 'bg-gray-50 border-gray-200 opacity-60'
+    : isReplacement
     ? 'bg-amber-50 border-amber-200'
     : 'bg-white border-gray-200 text-gray-800';
   const badgeClass = isReplacement
@@ -98,6 +102,11 @@ function SlotCard({ slot, isReplacement }: { slot: ScheduleSlotDto; isReplacemen
 
   return (
     <div className={`rounded-lg border p-3 space-y-1.5 h-[130px] overflow-hidden ${cardClass}`}>
+      {isCancelled && (
+        <div className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded px-2 py-0.5 w-fit">
+          Скасовано
+        </div>
+      )}
       {timeLabel && (
         <div className="flex items-center gap-1.5 text-xs font-semibold">
           <Clock size={11} className="shrink-0" />
@@ -140,7 +149,11 @@ function SlotCard({ slot, isReplacement }: { slot: ScheduleSlotDto; isReplacemen
   );
 }
 
-function DayColumn({ day, allClassNames }: { day: WeekDayDto; allClassNames: string[] }) {
+function DayColumn({ day, allClassNames, cancelledClassIds }: {
+  day: WeekDayDto;
+  allClassNames: string[];
+  cancelledClassIds: Set<number>;
+}) {
   const dayLabel = DAY_NAMES[day.dayName] ?? day.dayName;
   const slotByClass = new Map(day.slots.map(s => [s.className ?? String(s.semesterClassId), s]));
 
@@ -158,19 +171,26 @@ function DayColumn({ day, allClassNames }: { day: WeekDayDto; allClassNames: str
       <div className="p-2 space-y-2">
         {allClassNames.map(cn => {
           const slot = slotByClass.get(cn);
-          return slot
-            ? <SlotCard key={slot.id} slot={slot} isReplacement={day.isReplacement} />
-            : <div key={cn} className="h-[130px]" />;
+          if (!slot) return <div key={cn} className="h-[130px]" />;
+          const isCancelled = cancelledClassIds.has(slot.semesterClassId);
+          return <SlotCard key={slot.id} slot={slot} isReplacement={day.isReplacement} isCancelled={isCancelled} />;
         })}
       </div>
     </div>
   );
 }
 
-function WeekGrid({ week, label }: { week: CurrentWeekDto; label?: string }) {
+function WeekGrid({ week, label, cancellations }: { week: CurrentWeekDto; label?: string; cancellations?: ClassCancellationDto[] }) {
   const allClassNames = [
     ...new Set(week.days.flatMap(d => d.slots.map(s => s.className ?? String(s.semesterClassId)))),
   ].sort((a, b) => Number(a) - Number(b));
+
+  // Build a map: date -> set of cancelled semesterClassIds
+  const cancelledByDate = new Map<string, Set<number>>();
+  for (const c of (cancellations ?? [])) {
+    if (!cancelledByDate.has(c.date)) cancelledByDate.set(c.date, new Set());
+    cancelledByDate.get(c.date)!.add(c.semesterClassId);
+  }
 
   return (
     <div className="space-y-2">
@@ -192,7 +212,12 @@ function WeekGrid({ week, label }: { week: CurrentWeekDto; label?: string }) {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="flex">
           {week.days.map(day => (
-            <DayColumn key={day.date} day={day} allClassNames={allClassNames} />
+            <DayColumn
+              key={day.date}
+              day={day}
+              allClassNames={allClassNames}
+              cancelledClassIds={cancelledByDate.get(day.date) ?? new Set()}
+            />
           ))}
         </div>
       </div>
@@ -217,6 +242,8 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
   const [semesterWeeks, setSemesterWeeks] = useState<CurrentWeekDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cancellations, setCancellations] = useState<ClassCancellationDto[]>([]);
+  const [showFreeRooms, setShowFreeRooms] = useState(false);
 
   // load groups once
   useEffect(() => {
@@ -240,15 +267,29 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
     setLoading(true);
     setError('');
     try {
+      const sem = await getCurrentSemester();
       if (viewMode === 'week') {
         const data = await getCurrentWeek(selectedGroup, currentDate);
         setWeek(data);
+        // Fetch cancellations for this week's date range
+        if (data.days.length > 0) {
+          const groupId = data.days.flatMap(d => d.slots).find(s => s.groupId)?.groupId;
+          if (groupId) {
+            getCancellations(sem.id, groupId, data.weekStart, data.weekEnd)
+              .then(setCancellations).catch(() => {});
+          }
+        }
       } else {
-        const sem = await getCurrentSemester();
         if (!sem.startDay || !sem.endDay) throw new Error('Дати семестру не встановлені');
         const mondays = getAllWeekMondays(sem.startDay, sem.endDay);
         const weeks = await Promise.all(mondays.map(d => getCurrentWeek(selectedGroup, d)));
         setSemesterWeeks(weeks);
+        // Fetch all cancellations for the semester
+        const firstGroupId = weeks.flatMap(w => w.days).flatMap(d => d.slots).find(s => s.groupId)?.groupId;
+        if (firstGroupId) {
+          getCancellations(sem.id, firstGroupId, sem.startDay, sem.endDay)
+            .then(setCancellations).catch(() => {});
+        }
       }
     } catch (e: any) {
       if (e.message === 'UNAUTHORIZED') onUnauthorized();
@@ -270,15 +311,21 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
+      {showFreeRooms && (
+        <FreeRoomsModal onClose={() => setShowFreeRooms(false)} initialDate={currentDate} />
+      )}
+      <header className="bg-white border-b border-gray-200 print:hidden">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-900">Розклад занять</h1>
-          <ProfileDropdown profile={profile} onLogout={onLogout} onAdminPanel={onAdminPanel} onProfileRefresh={onProfileRefresh} />
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <ProfileDropdown profile={profile} onLogout={onLogout} onAdminPanel={onAdminPanel} onProfileRefresh={onProfileRefresh} />
+          </div>
         </div>
       </header>
 
       {/* Filter bar */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm print:hidden">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-3">
 
           {/* Group selector */}
@@ -304,6 +351,24 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
               Розклад викладача
             </button>
           )}
+
+          {/* Free rooms button */}
+          <button
+            onClick={() => setShowFreeRooms(true)}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center gap-1.5"
+          >
+            <DoorOpen size={15} />
+            Вільні аудиторії
+          </button>
+
+          {/* Print / PDF */}
+          <button
+            onClick={() => window.print()}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+          >
+            <Printer size={15} />
+            Друк / PDF
+          </button>
 
           {/* View mode toggle */}
           <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
@@ -367,13 +432,13 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
         )}
 
         {!loading && !error && viewMode === 'week' && week && (
-          <WeekGrid week={week} />
+          <WeekGrid week={week} cancellations={cancellations} />
         )}
 
         {!loading && !error && viewMode === 'semester' && semesterWeeks.length > 0 && (
           <div className="space-y-8">
             {semesterWeeks.map(w => (
-              <WeekGrid key={w.weekStart} week={w} />
+              <WeekGrid key={w.weekStart} week={w} cancellations={cancellations} />
             ))}
           </div>
         )}

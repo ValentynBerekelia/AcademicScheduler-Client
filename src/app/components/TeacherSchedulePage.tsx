@@ -6,6 +6,7 @@ import {
 } from '../utils/api';
 import { Clock, MapPin, Users, ExternalLink, User } from 'lucide-react';
 import { ProfileDropdown } from './ProfileDropdown';
+import { NotificationBell } from './NotificationBell';
 import { UserProfile } from '../utils/api';
 
 interface TeacherSchedulePageProps {
@@ -228,12 +229,15 @@ export function TeacherSchedulePage({ profile, onLogout, onUnauthorized, onAdmin
             )}
             <h1 className="text-xl font-bold text-gray-900">Розклад викладача</h1>
           </div>
-          <ProfileDropdown
-            profile={profile}
-            onLogout={onLogout}
-            onAdminPanel={onAdminPanel}
-            onProfileRefresh={onProfileRefresh}
-          />
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <ProfileDropdown
+              profile={profile}
+              onLogout={onLogout}
+              onAdminPanel={onAdminPanel}
+              onProfileRefresh={onProfileRefresh}
+            />
+          </div>
         </div>
       </header>
 

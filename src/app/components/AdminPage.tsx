@@ -3,9 +3,11 @@ import { UserProfile } from '../utils/api';
 import { ProfileDropdown } from './ProfileDropdown';
 import { SaturdayManagement } from './SaturdayManagement';
 import { UserManagement } from './UserManagement';
-import { LayoutDashboard, Users, CalendarRange, Calendar, ChevronRight } from 'lucide-react';
+import { CancellationsManagement } from './CancellationsManagement';
+import { NotificationBell } from './NotificationBell';
+import { LayoutDashboard, Users, CalendarRange, Calendar, XCircle, ChevronRight } from 'lucide-react';
 
-type AdminSection = 'saturdays' | 'users' | 'semester' | null;
+type AdminSection = 'saturdays' | 'users' | 'semester' | 'cancellations' | null;
 
 interface AdminPageProps {
   profile: UserProfile;
@@ -36,6 +38,16 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
       color: 'text-blue-600',
       bg: 'bg-blue-50',
       border: 'border-blue-200',
+      active: true,
+    },
+    {
+      key: 'cancellations' as AdminSection,
+      icon: XCircle,
+      title: 'Скасування занять',
+      description: 'Скасувати конкретне заняття для групи на певну дату',
+      color: 'text-red-600',
+      bg: 'bg-red-50',
+      border: 'border-red-200',
       active: true,
     },
     {
@@ -77,7 +89,10 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
               </>
             )}
           </div>
-          <ProfileDropdown profile={profile} onLogout={onLogout} onProfileRefresh={onProfileRefresh} />
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <ProfileDropdown profile={profile} onLogout={onLogout} onProfileRefresh={onProfileRefresh} />
+          </div>
         </div>
       </header>
 
@@ -114,6 +129,8 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
           <SaturdayManagement onBack={() => setSection(null)} />
         ) : section === 'users' ? (
           <UserManagement currentUserEmail={profile.email} />
+        ) : section === 'cancellations' ? (
+          <CancellationsManagement />
         ) : null}
       </div>
     </div>

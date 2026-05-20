@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, Users, Bell, Calendar, Mail, LayoutDashboard, RefreshCw, Unlink, Trash2 } from 'lucide-react';
+import { LogOut, Users, Calendar, Mail, LayoutDashboard, RefreshCw, Unlink, Trash2 } from 'lucide-react';
 import { UserProfile, logout, disconnectCalendar, resyncCalendar, clearCalendar } from '../utils/api';
 
 interface ProfileDropdownProps {
@@ -172,15 +172,6 @@ export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefr
                 <span>Додати до Google Calendar</span>
               </a>
             )}
-          </div>
-
-          {/* Future actions */}
-          <div className="px-2 py-2 border-b border-gray-100">
-            <button disabled className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 cursor-not-allowed">
-              <Bell size={15} />
-              <span>Сповіщення</span>
-              <span className="ml-auto text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded">скоро</span>
-            </button>
           </div>
 
           {/* Logout */}

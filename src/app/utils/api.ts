@@ -315,3 +315,111 @@ export async function getGroups(): Promise<GroupItemDto[]> {
   if (!response.ok) throw new Error('Failed to load groups');
   return response.json();
 }
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export interface NotificationDto {
+  id: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export async function getNotifications(): Promise<NotificationDto[]> {
+  const r = await fetch(`${API_BASE_URL}/notifications`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Failed to load notifications');
+  return r.json();
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await fetch(`${API_BASE_URL}/notifications/read-all`, { method: 'PUT', credentials: 'include' });
+}
+
+export async function deleteNotification(id: string): Promise<void> {
+  await fetch(`${API_BASE_URL}/notifications/${id}`, { method: 'DELETE', credentials: 'include' });
+}
+
+// ── Cancellations ─────────────────────────────────────────────────────────────
+
+export interface ClassCancellationDto {
+  id: string;
+  semesterId: number;
+  groupId: number;
+  date: string;
+  semesterClassId: number;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface CreateCancellationRequest {
+  semesterId: number;
+  groupId: number;
+  date: string;
+  semesterClassId: number;
+  reason?: string;
+}
+
+export async function getCancellations(semesterId: number, groupId?: number, from?: string, to?: string): Promise<ClassCancellationDto[]> {
+  const params = new URLSearchParams({ semesterId: String(semesterId) });
+  if (groupId != null) params.set('groupId', String(groupId));
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const r = await fetch(`${API_BASE_URL}/cancellations?${params}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Failed to load cancellations');
+  return r.json();
+}
+
+export async function createCancellation(req: CreateCancellationRequest): Promise<{ id: string }> {
+  const r = await fetch(`${API_BASE_URL}/cancellations`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || 'Failed to create cancellation');
+  }
+  return r.json();
+}
+
+export async function deleteCancellation(id: string): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/cancellations/${id}`, { method: 'DELETE', credentials: 'include' });
+  if (!r.ok) throw new Error('Failed to delete cancellation');
+}
+
+// ── Semester Classes ──────────────────────────────────────────────────────────
+
+export interface SemesterClassItemDto {
+  id: number;
+  className: string | null;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+export async function getSemesterClasses(): Promise<SemesterClassItemDto[]> {
+  const r = await fetch(`${API_BASE_URL}/semester-classes`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Failed to load semester classes');
+  return r.json();
+}
+
+// ── Free Rooms ────────────────────────────────────────────────────────────────
+
+export interface FreeRoomsDto {
+  date: string;
+  weekType: string;
+  dayName: string;
+  slot: { semesterClassId: number; className: string | null; startTime: string | null; endTime: string | null } | null;
+  freeRooms: { id: number; name: string }[];
+}
+
+export async function getFreeRooms(date: string, semesterClassId: number): Promise<FreeRoomsDto> {
+  const params = new URLSearchParams({ date, semesterClassId: String(semesterClassId) });
+  const r = await fetch(`${API_BASE_URL}/rooms/free?${params}`, { credentials: 'include' });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || 'Failed to load free rooms');
+  }
+  return r.json();
+}

@@ -7,12 +7,18 @@ interface FreeRoomsModalProps {
   initialDate?: string;
 }
 
+function nearestWorkday(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (d.getDay() === 0) d.setDate(d.getDate() + 1); // Sunday → Monday
+  return d.toISOString().slice(0, 10);
+}
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return nearestWorkday(new Date().toISOString().slice(0, 10));
 }
 
 export function FreeRoomsModal({ onClose, initialDate }: FreeRoomsModalProps) {
-  const [date, setDate] = useState(initialDate ?? todayStr());
+  const [date, setDate] = useState(nearestWorkday(initialDate ?? todayStr()));
   const [classes, setClasses] = useState<SemesterClassItemDto[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [result, setResult] = useState<FreeRoomsDto | null>(null);
@@ -22,17 +28,22 @@ export function FreeRoomsModal({ onClose, initialDate }: FreeRoomsModalProps) {
   useEffect(() => {
     getSemesterClasses().then(data => {
       setClasses(data);
-      if (data.length > 0) setSelectedClassId(String(data[0].id));
+      if (data.length > 0) {
+        const firstId = String(data[0].id);
+        setSelectedClassId(firstId);
+        doSearch(date, Number(firstId));
+      }
     }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSearch = async () => {
-    if (!date || !selectedClassId) return;
+  const doSearch = async (searchDate: string, classId: number) => {
+    if (!searchDate || !classId) return;
     setLoading(true);
     setError('');
     setResult(null);
     try {
-      const data = await getFreeRooms(date, Number(selectedClassId));
+      const data = await getFreeRooms(searchDate, classId);
       setResult(data);
     } catch (e: any) {
       setError(e.message || 'Помилка завантаження');
@@ -40,6 +51,8 @@ export function FreeRoomsModal({ onClose, initialDate }: FreeRoomsModalProps) {
       setLoading(false);
     }
   };
+
+  const handleSearch = () => doSearch(date, Number(selectedClassId));
 
   const selectedClass = classes.find(c => String(c.id) === selectedClassId);
 

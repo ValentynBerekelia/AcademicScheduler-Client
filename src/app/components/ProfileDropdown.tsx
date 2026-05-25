@@ -1,21 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, Users, Calendar, Mail, LayoutDashboard, RefreshCw, Unlink, Trash2 } from 'lucide-react';
-import { UserProfile, logout, disconnectCalendar, resyncCalendar, clearCalendar } from '../utils/api';
+import { LogOut, Users, Calendar, Mail, LayoutDashboard, RefreshCw, Unlink, Trash2, GraduationCap, Pencil, Check, X } from 'lucide-react';
+import { UserProfile, logout, disconnectCalendar, resyncCalendar, clearCalendar, updateMyGroup, getGroups, GroupItemDto } from '../utils/api';
 
 interface ProfileDropdownProps {
   profile: UserProfile;
   onLogout: () => void;
   onAdminPanel?: () => void;
   onProfileRefresh?: () => void;
+  onTeacherCabinet?: () => void;
 }
 
 const ROLE_LABELS: Record<string, string> = {
   Admin: 'Адміністратор',
+  Teacher: 'Викладач',
   User: 'Студент',
 };
 
 const ROLE_COLORS: Record<string, string> = {
   Admin: 'bg-red-100 text-red-700',
+  Teacher: 'bg-blue-100 text-blue-700',
   User: 'bg-emerald-100 text-emerald-700',
 };
 
@@ -23,10 +26,14 @@ function getInitials(name: string): string {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefresh }: ProfileDropdownProps) {
+export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefresh, onTeacherCabinet }: ProfileDropdownProps) {
   const [open, setOpen] = useState(false);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarMsg, setCalendarMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [editingGroup, setEditingGroup] = useState(false);
+  const [groupInput, setGroupInput] = useState('');
+  const [groupSaving, setGroupSaving] = useState(false);
+  const [groups, setGroups] = useState<GroupItemDto[]>([]);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,6 +43,26 @@ export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefr
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  useEffect(() => {
+    if (editingGroup && groups.length === 0) {
+      getGroups().then(setGroups).catch(() => {});
+    }
+  }, [editingGroup]);
+
+  const handleSaveGroup = async () => {
+    if (!groupInput.trim()) return;
+    setGroupSaving(true);
+    try {
+      await updateMyGroup(groupInput.trim());
+      onProfileRefresh?.();
+      setEditingGroup(false);
+    } catch {
+      // keep form open
+    } finally {
+      setGroupSaving(false);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -75,10 +102,57 @@ export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefr
 
           {/* Info */}
           <div className="px-4 py-3 space-y-2 border-b border-gray-100">
-            {profile.group && (
+            {profile.group ? (
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <Users size={14} className="text-gray-400 shrink-0" />
                 <span>Група <span className="font-medium text-gray-900">{profile.group}</span></span>
+                {profile.role === 'User' && (
+                  <button
+                    onClick={() => { setGroupInput(profile.group ?? ''); setEditingGroup(true); }}
+                    className="ml-auto text-gray-400 hover:text-gray-600"
+                    title="Змінити групу"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                )}
+              </div>
+            ) : profile.role === 'User' && !editingGroup ? (
+              <button
+                onClick={() => setEditingGroup(true)}
+                className="flex items-center gap-2 text-sm text-amber-600 hover:text-amber-700 w-full"
+              >
+                <Users size={14} className="shrink-0" />
+                <span>Вказати групу</span>
+              </button>
+            ) : null}
+            {editingGroup && (
+              <div className="space-y-1.5">
+                <select
+                  value={groupInput}
+                  onChange={e => setGroupInput(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                  autoFocus
+                >
+                  <option value="">— Оберіть групу —</option>
+                  {groups.map(g => (
+                    <option key={g.id} value={g.title}>{g.title}</option>
+                  ))}
+                </select>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={handleSaveGroup}
+                    disabled={groupSaving || !groupInput.trim()}
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    <Check size={12} /> Зберегти
+                  </button>
+                  <button
+                    onClick={() => setEditingGroup(false)}
+                    className="flex items-center justify-center px-2 py-1.5 rounded-lg text-xs bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
               </div>
             )}
             <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -86,6 +160,19 @@ export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefr
               <span className="truncate">{profile.email}</span>
             </div>
           </div>
+
+          {/* Teacher cabinet */}
+          {profile.role === 'Teacher' && onTeacherCabinet && (
+            <div className="px-2 py-2 border-b border-gray-100">
+              <button
+                onClick={() => { setOpen(false); onTeacherCabinet(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                <GraduationCap size={15} />
+                <span>Мій кабінет</span>
+              </button>
+            </div>
+          )}
 
           {/* Admin panel */}
           {profile.role === 'Admin' && onAdminPanel && (

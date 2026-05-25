@@ -67,6 +67,7 @@ export interface UserProfile {
   role: string;
   group: string | null;
   calendarSyncEnabled: boolean;
+  teacherName: string | null;
 }
 
 export async function disconnectCalendar(): Promise<void> {
@@ -84,6 +85,19 @@ export async function resyncCalendar(): Promise<void> {
 export async function clearCalendar(): Promise<void> {
   const r = await fetch(`${API_BASE_URL}/calendar/clear`, { method: 'DELETE', credentials: 'include' });
   if (!r.ok) throw new Error(await r.text());
+}
+
+export async function updateMyGroup(group: string): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/auth/group`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ group }),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || 'Помилка збереження групи');
+  }
 }
 
 export async function getMe(): Promise<UserProfile> {
@@ -182,6 +196,7 @@ export interface ScheduleSlotDto {
   id: number;
   semesterId: number;
   groupId: number;
+  groupTitle: string | null;
   day: string;
   semesterClassId: number;
   weekType: number;
@@ -275,6 +290,7 @@ export interface UserDto {
   email: string;
   role: string;
   group: string | null;
+  teacherName: string | null;
 }
 
 export async function getUsers(): Promise<UserDto[]> {
@@ -296,6 +312,16 @@ export async function updateUserRole(id: number, role: string): Promise<void> {
   }
 }
 
+export async function updateUserTeacherName(id: number, teacherName: string | null): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/admin/users/${id}/teacher-name`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teacherName }),
+  });
+  if (!r.ok) throw new Error(await r.text() || 'Failed to update teacher name');
+}
+
 export async function deleteUser(id: number): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
     method: 'DELETE',
@@ -314,6 +340,26 @@ export async function getGroups(): Promise<GroupItemDto[]> {
   if (response.status === 401) throw new Error('UNAUTHORIZED');
   if (!response.ok) throw new Error('Failed to load groups');
   return response.json();
+}
+
+// ── Teacher workload ──────────────────────────────────────────────────────────
+
+export interface TeacherWorkloadDto {
+  teacherName: string;
+  oddWeekSlots: number;
+  evenWeekSlots: number;
+  totalPerCycle: number;
+  subjectCount: number;
+  subjects: string[];
+  groupCount: number;
+}
+
+export async function getTeacherWorkload(teacherName: string): Promise<TeacherWorkloadDto> {
+  const r = await fetch(`${API_BASE_URL}/teachers/workload?teacherName=${encodeURIComponent(teacherName)}`, {
+    credentials: 'include',
+  });
+  if (!r.ok) throw new Error(await r.text() || 'Failed to load workload');
+  return r.json();
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -349,6 +395,7 @@ export interface ClassCancellationDto {
   date: string;
   semesterClassId: number;
   reason: string | null;
+  meetingLink: string | null;
   createdAt: string;
 }
 
@@ -358,6 +405,7 @@ export interface CreateCancellationRequest {
   date: string;
   semesterClassId: number;
   reason?: string;
+  meetingLink?: string;
 }
 
 export async function getCancellations(semesterId: number, groupId?: number, from?: string, to?: string): Promise<ClassCancellationDto[]> {
@@ -365,6 +413,13 @@ export async function getCancellations(semesterId: number, groupId?: number, fro
   if (groupId != null) params.set('groupId', String(groupId));
   if (from) params.set('from', from);
   if (to) params.set('to', to);
+  const r = await fetch(`${API_BASE_URL}/cancellations?${params}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Failed to load cancellations');
+  return r.json();
+}
+
+export async function getCancellationsByTeacher(semesterId: number, teacherName: string): Promise<ClassCancellationDto[]> {
+  const params = new URLSearchParams({ semesterId: String(semesterId), teacherName });
   const r = await fetch(`${API_BASE_URL}/cancellations?${params}`, { credentials: 'include' });
   if (!r.ok) throw new Error('Failed to load cancellations');
   return r.json();

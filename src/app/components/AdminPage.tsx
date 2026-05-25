@@ -4,7 +4,6 @@ import { ProfileDropdown } from './ProfileDropdown';
 import { SaturdayManagement } from './SaturdayManagement';
 import { UserManagement } from './UserManagement';
 import { CancellationsManagement } from './CancellationsManagement';
-import { NotificationBell } from './NotificationBell';
 import { LayoutDashboard, Users, CalendarRange, Calendar, XCircle, ChevronRight } from 'lucide-react';
 
 type AdminSection = 'saturdays' | 'users' | 'semester' | 'cancellations' | null;
@@ -90,7 +89,6 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
             )}
           </div>
           <div className="flex items-center gap-2">
-            <NotificationBell />
             <ProfileDropdown profile={profile} onLogout={onLogout} onProfileRefresh={onProfileRefresh} />
           </div>
         </div>

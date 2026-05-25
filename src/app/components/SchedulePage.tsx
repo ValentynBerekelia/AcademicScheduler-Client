@@ -6,7 +6,6 @@ import {
 } from '../utils/api';
 import { Calendar, Clock, User, MapPin, ExternalLink, ChevronLeft, ChevronRight, Printer, DoorOpen } from 'lucide-react';
 import { ProfileDropdown } from './ProfileDropdown';
-import { NotificationBell } from './NotificationBell';
 import { FreeRoomsModal } from './FreeRoomsModal';
 
 interface SchedulePageProps {
@@ -16,6 +15,7 @@ interface SchedulePageProps {
   onAdminPanel?: () => void;
   onProfileRefresh?: () => void;
   onTeacherSchedule?: () => void;
+  onTeacherCabinet?: () => void;
 }
 
 type ViewMode = 'week' | 'semester';
@@ -97,20 +97,21 @@ function parseTime(t: string): number {
   return h * 60 + m;
 }
 
-function SlotCard({ slot, isReplacement, isCancelled, isActive }: {
+function SlotCard({ slot, isReplacement, isCancelled, onlineMeetingLink, isActive }: {
   slot: ScheduleSlotDto;
   isReplacement: boolean;
   isCancelled?: boolean;
+  onlineMeetingLink?: string | null;
   isActive?: boolean;
 }) {
   const lessonType = slot.lessonType ?? '';
 
-  if (isCancelled) {
+  if (isCancelled && !onlineMeetingLink) {
     const timeLabel = slot.startTime && slot.endTime
       ? `${slot.startTime} – ${slot.endTime}`
       : slot.className ? `Пара ${slot.className}` : null;
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 h-[130px] flex flex-col items-center justify-center gap-1 text-center px-3">
+      <div className="rounded-lg border border-red-200 bg-red-50 h-[155px] flex flex-col items-center justify-center gap-1 text-center px-3">
         <span className="text-xs font-bold text-red-600 uppercase tracking-wide">Скасовано</span>
         {timeLabel && <span className="text-xs text-red-400">{timeLabel}</span>}
         <span className="text-xs text-red-400 leading-snug opacity-80">{slot.subjectForSite}</span>
@@ -118,8 +119,12 @@ function SlotCard({ slot, isReplacement, isCancelled, isActive }: {
     );
   }
 
+  // Online override: use the cancellation's meeting link instead of the slot's
+  const effectiveLink = onlineMeetingLink ?? slot.linkToMeeting;
+
   const cardClass = isActive
     ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-300 shadow-sm'
+    : onlineMeetingLink ? 'bg-blue-50 border-blue-200 text-gray-800'
     : isReplacement ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200 text-gray-800';
   const badgeClass = isReplacement
     ? 'bg-amber-100 text-amber-700'
@@ -132,7 +137,7 @@ function SlotCard({ slot, isReplacement, isCancelled, isActive }: {
     : null;
 
   return (
-    <div className={`rounded-lg border p-3 space-y-1.5 h-[130px] overflow-hidden ${cardClass}`}>
+    <div className={`rounded-lg border p-3 space-y-1.5 h-[155px] overflow-hidden ${cardClass}`}>
       {isActive && (
         <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 rounded px-1.5 py-0.5 w-fit">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
@@ -166,25 +171,29 @@ function SlotCard({ slot, isReplacement, isCancelled, isActive }: {
           <span>Ауд. {slot.roomName}</span>
         </div>
       )}
-      {slot.linkToMeeting && (
+      {effectiveLink && (
         <a
-          href={slot.linkToMeeting}
+          href={effectiveLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+          className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium hover:opacity-80 ${
+            onlineMeetingLink
+              ? 'bg-blue-100 text-blue-700'
+              : 'text-blue-600'
+          }`}
         >
-          <ExternalLink size={11} className="shrink-0" />
-          Приєднатись онлайн
+          <ExternalLink size={10} className="shrink-0" />
+          {onlineMeetingLink ? 'Онлайн' : 'Приєднатись онлайн'}
         </a>
       )}
     </div>
   );
 }
 
-function DayColumn({ day, allClassNames, cancelledClassIds, isToday, nowMin }: {
+function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin }: {
   day: WeekDayDto;
   allClassNames: string[];
-  cancelledClassIds: Set<number>;
+  cancellationMap: Map<number, string | null>; // semesterClassId -> meetingLink (null=cancelled)
   isToday: boolean;
   nowMin: number;
 }) {
@@ -214,11 +223,15 @@ function DayColumn({ day, allClassNames, cancelledClassIds, isToday, nowMin }: {
       <div className="p-2 space-y-2">
         {allClassNames.map(cn => {
           const slot = slotByClass.get(cn);
-          if (!slot) return <div key={cn} className="h-[130px]" />;
-          const isCancelled = cancelledClassIds.has(slot.semesterClassId);
+          if (!slot) return <div key={cn} className="h-[155px]" />;
+          const cancellation = cancellationMap.has(slot.semesterClassId)
+            ? cancellationMap.get(slot.semesterClassId)
+            : undefined;
+          const isCancelled = cancellation !== undefined;
+          const onlineMeetingLink = (cancellation != null && cancellation !== undefined) ? cancellation : undefined;
           const isActive = isToday && !!slot.startTime && !!slot.endTime
             && nowMin >= parseTime(slot.startTime) && nowMin <= parseTime(slot.endTime);
-          return <SlotCard key={slot.id} slot={slot} isReplacement={day.isReplacement} isCancelled={isCancelled} isActive={isActive} />;
+          return <SlotCard key={slot.id} slot={slot} isReplacement={day.isReplacement} isCancelled={isCancelled} onlineMeetingLink={onlineMeetingLink} isActive={isActive} />;
         })}
       </div>
     </div>
@@ -235,10 +248,11 @@ function WeekGrid({ week, label, cancellations, now }: {
     ...new Set(week.days.flatMap(d => d.slots.map(s => s.className ?? String(s.semesterClassId)))),
   ].sort((a, b) => Number(a) - Number(b));
 
-  const cancelledByDate = new Map<string, Set<number>>();
+  // date -> semesterClassId -> meetingLink (null = cancelled, string = online)
+  const cancelledByDate = new Map<string, Map<number, string | null>>();
   for (const c of (cancellations ?? [])) {
-    if (!cancelledByDate.has(c.date)) cancelledByDate.set(c.date, new Set());
-    cancelledByDate.get(c.date)!.add(c.semesterClassId);
+    if (!cancelledByDate.has(c.date)) cancelledByDate.set(c.date, new Map());
+    cancelledByDate.get(c.date)!.set(c.semesterClassId, c.meetingLink ?? null);
   }
 
   const todayDateStr = now.toISOString().slice(0, 10);
@@ -268,7 +282,7 @@ function WeekGrid({ week, label, cancellations, now }: {
               key={day.date}
               day={day}
               allClassNames={allClassNames}
-              cancelledClassIds={cancelledByDate.get(day.date) ?? new Set()}
+              cancellationMap={cancelledByDate.get(day.date) ?? new Map()}
               isToday={day.date === todayDateStr}
               nowMin={nowMin}
             />
@@ -282,11 +296,11 @@ function WeekGrid({ week, label, cancellations, now }: {
 const STORAGE_GROUP_KEY = 'schedule_selected_group';
 const STORAGE_VIEW_KEY = 'schedule_view_mode';
 
-export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, onProfileRefresh, onTeacherSchedule }: SchedulePageProps) {
+export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, onProfileRefresh, onTeacherSchedule, onTeacherCabinet }: SchedulePageProps) {
   const now = useNow();
   const [groups, setGroups] = useState<GroupItemDto[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>(
-    () => localStorage.getItem(STORAGE_GROUP_KEY) ?? profile.group ?? ''
+    () => profile.group || localStorage.getItem(STORAGE_GROUP_KEY) || ''
   );
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => (localStorage.getItem(STORAGE_VIEW_KEY) as ViewMode) ?? 'week'
@@ -326,23 +340,19 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
       if (viewMode === 'week') {
         const data = await getCurrentWeek(selectedGroup, currentDate);
         setWeek(data);
-        // Fetch cancellations for this week's date range
-        if (data.days.length > 0) {
-          const groupId = data.days.flatMap(d => d.slots).find(s => s.groupId)?.groupId;
-          if (groupId) {
-            getCancellations(sem.id, groupId, data.weekStart, data.weekEnd)
-              .then(setCancellations).catch(() => {});
-          }
+        const firstSlot = data.days.flatMap(d => d.slots)[0];
+        if (firstSlot) {
+          getCancellations(sem.id, firstSlot.groupId, data.weekStart, data.weekEnd)
+            .then(setCancellations).catch(() => {});
         }
       } else {
         if (!sem.startDay || !sem.endDay) throw new Error('Дати семестру не встановлені');
         const mondays = getAllWeekMondays(sem.startDay, sem.endDay);
         const weeks = await Promise.all(mondays.map(d => getCurrentWeek(selectedGroup, d)));
         setSemesterWeeks(weeks);
-        // Fetch all cancellations for the semester
-        const firstGroupId = weeks.flatMap(w => w.days).flatMap(d => d.slots).find(s => s.groupId)?.groupId;
-        if (firstGroupId) {
-          getCancellations(sem.id, firstGroupId, sem.startDay, sem.endDay)
+        const firstSlot = weeks.flatMap(w => w.days).flatMap(d => d.slots)[0];
+        if (firstSlot) {
+          getCancellations(sem.id, firstSlot.groupId)
             .then(setCancellations).catch(() => {});
         }
       }
@@ -389,8 +399,7 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-900">Розклад занять</h1>
           <div className="flex items-center gap-2">
-            <NotificationBell />
-            <ProfileDropdown profile={profile} onLogout={onLogout} onAdminPanel={onAdminPanel} onProfileRefresh={onProfileRefresh} />
+            <ProfileDropdown profile={profile} onLogout={onLogout} onAdminPanel={onAdminPanel} onProfileRefresh={onProfileRefresh} onTeacherCabinet={onTeacherCabinet} />
           </div>
         </div>
       </header>
@@ -413,8 +422,8 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
             ))}
           </select>
 
-          {/* Teacher schedule link */}
-          {onTeacherSchedule && (
+          {/* Teacher schedule link — hidden for Teacher role (they use personal cabinet) */}
+          {onTeacherSchedule && profile.role !== 'Teacher' && (
             <button
               onClick={onTeacherSchedule}
               className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"

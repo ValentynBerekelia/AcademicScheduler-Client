@@ -11,7 +11,7 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState<'schedule' | 'admin' | 'teachers'>('schedule');
+  const [page, setPage] = useState<'schedule' | 'admin' | 'teachers' | 'cabinet'>('schedule');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -88,6 +88,20 @@ export default function App() {
           onAdminPanel={profile.role === 'Admin' ? () => setPage('admin') : undefined}
           onProfileRefresh={handleProfileRefresh}
           onBack={() => setPage('schedule')}
+          personalMode={false}
+        />
+      );
+    }
+    if (page === 'cabinet') {
+      return (
+        <TeacherSchedulePage
+          profile={profile}
+          onLogout={handleLogout}
+          onUnauthorized={handleLogout}
+          onAdminPanel={profile.role === 'Admin' ? () => setPage('admin') : undefined}
+          onProfileRefresh={handleProfileRefresh}
+          onBack={() => setPage('schedule')}
+          personalMode={true}
         />
       );
     }
@@ -99,6 +113,7 @@ export default function App() {
         onAdminPanel={profile.role === 'Admin' ? () => setPage('admin') : undefined}
         onProfileRefresh={handleProfileRefresh}
         onTeacherSchedule={() => setPage('teachers')}
+        onTeacherCabinet={profile.role === 'Teacher' ? () => setPage('cabinet') : undefined}
       />
     );
   }

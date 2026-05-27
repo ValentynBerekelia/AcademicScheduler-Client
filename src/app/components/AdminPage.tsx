@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { UserProfile } from '../utils/api';
+import { UserProfile, reseedDatabase } from '../utils/api';
 import { ProfileDropdown } from './ProfileDropdown';
 import { SaturdayManagement } from './SaturdayManagement';
 import { UserManagement } from './UserManagement';
 import { CancellationsManagement } from './CancellationsManagement';
-import { LayoutDashboard, Users, CalendarRange, Calendar, XCircle, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, XCircle, ChevronRight, DatabaseZap, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 
-type AdminSection = 'saturdays' | 'users' | 'semester' | 'cancellations' | null;
+type AdminSection = 'saturdays' | 'users' | 'cancellations' | 'reseed' | null;
 
 interface AdminPageProps {
   profile: UserProfile;
@@ -27,7 +27,6 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
       color: 'text-amber-600',
       bg: 'bg-amber-50',
       border: 'border-amber-200',
-      active: true,
     },
     {
       key: 'users' as AdminSection,
@@ -37,7 +36,6 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
       color: 'text-blue-600',
       bg: 'bg-blue-50',
       border: 'border-blue-200',
-      active: true,
     },
     {
       key: 'cancellations' as AdminSection,
@@ -47,17 +45,15 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
       color: 'text-red-600',
       bg: 'bg-red-50',
       border: 'border-red-200',
-      active: true,
     },
     {
-      key: 'semester' as AdminSection,
-      icon: CalendarRange,
-      title: 'Управління семестром',
-      description: 'Встановлення поточного семестру',
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-50',
-      border: 'border-indigo-200',
-      active: false,
+      key: 'reseed' as AdminSection,
+      icon: DatabaseZap,
+      title: 'Оновлення розкладу',
+      description: 'Завантаження актуального розкладу з університетської API',
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
+      border: 'border-emerald-200',
     },
   ];
 
@@ -97,31 +93,17 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!section ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {SECTIONS.map(({ key, icon: Icon, title, description, color, bg, border, active }) =>
-              active ? (
-                <button
-                  key={title}
-                  onClick={() => setSection(key)}
-                  className={`text-left p-6 rounded-xl border-2 ${border} ${bg} hover:shadow-md transition-shadow`}
-                >
-                  <Icon size={28} className={`${color} mb-3`} />
-                  <h2 className={`font-semibold text-base ${color} mb-1`}>{title}</h2>
-                  <p className="text-sm text-gray-500">{description}</p>
-                </button>
-              ) : (
-                <div
-                  key={title}
-                  className={`p-6 rounded-xl border-2 ${border} ${bg} opacity-50`}
-                >
-                  <Icon size={28} className={`${color} mb-3`} />
-                  <h2 className={`font-semibold text-base ${color} mb-1`}>{title}</h2>
-                  <p className="text-sm text-gray-500">{description}</p>
-                  <span className="inline-block mt-3 text-xs bg-white text-gray-400 px-2 py-0.5 rounded border border-gray-200">
-                    скоро
-                  </span>
-                </div>
-              )
-            )}
+            {SECTIONS.map(({ key, icon: Icon, title, description, color, bg, border }) => (
+              <button
+                key={title}
+                onClick={() => setSection(key)}
+                className={`text-left p-6 rounded-xl border-2 ${border} ${bg} hover:shadow-md transition-shadow`}
+              >
+                <Icon size={28} className={`${color} mb-3`} />
+                <h2 className={`font-semibold text-base ${color} mb-1`}>{title}</h2>
+                <p className="text-sm text-gray-500">{description}</p>
+              </button>
+            ))}
           </div>
         ) : section === 'saturdays' ? (
           <SaturdayManagement onBack={() => setSection(null)} />
@@ -129,7 +111,106 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
           <UserManagement currentUserEmail={profile.email} />
         ) : section === 'cancellations' ? (
           <CancellationsManagement />
+        ) : section === 'reseed' ? (
+          <ReseedSection />
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+type ReseedStatus = 'idle' | 'confirm' | 'loading' | 'success' | 'error';
+
+function ReseedSection() {
+  const [status, setStatus] = useState<ReseedStatus>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  async function handleReseed() {
+    setStatus('loading');
+    try {
+      await reseedDatabase();
+      setStatus('success');
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : 'Невідома помилка');
+      setStatus('error');
+    }
+  }
+
+  return (
+    <div className="max-w-xl">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <DatabaseZap size={24} className="text-emerald-600" />
+          <h2 className="font-semibold text-gray-900">Оновлення розкладу</h2>
+        </div>
+
+        <p className="text-sm text-gray-600">
+          Завантажує актуальний розклад з університетської API і повністю замінює поточні дані:
+          пари, групи, викладачів, аудиторії та семестр.
+        </p>
+
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <AlertTriangle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-700">
+            Усі поточні дані розкладу будуть <strong>видалені та перезаписані</strong>.
+            Скасування занять, суботні заміни та налаштування користувачів залишаться.
+          </p>
+        </div>
+
+        {status === 'idle' && (
+          <button
+            onClick={() => setStatus('confirm')}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Оновити розклад
+          </button>
+        )}
+
+        {status === 'confirm' && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-gray-800">Ви впевнені? Цю дію неможливо скасувати.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleReseed}
+                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Так, оновити
+              </button>
+              <button
+                onClick={() => setStatus('idle')}
+                className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Скасувати
+              </button>
+            </div>
+          </div>
+        )}
+
+        {status === 'loading' && (
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Loader2 size={16} className="animate-spin text-emerald-600" />
+            Завантаження даних... це може зайняти кілька хвилин
+          </div>
+        )}
+
+        {status === 'success' && (
+          <div className="flex items-center gap-2 text-sm text-emerald-700">
+            <CheckCircle2 size={16} />
+            Розклад успішно оновлено
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="space-y-2">
+            <p className="text-sm text-red-600">Помилка: {errorMsg}</p>
+            <button
+              onClick={() => setStatus('idle')}
+              className="text-sm text-gray-500 underline hover:text-gray-700"
+            >
+              Спробувати знову
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

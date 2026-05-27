@@ -459,6 +459,19 @@ export async function getSemesterClasses(): Promise<SemesterClassItemDto[]> {
   return r.json();
 }
 
+// ── Admin: Reseed ─────────────────────────────────────────────────────────────
+
+export async function reseedDatabase(): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/admin/reseed`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || 'Помилка оновлення бази даних');
+  }
+}
+
 // ── Free Rooms ────────────────────────────────────────────────────────────────
 
 export interface FreeRoomsDto {

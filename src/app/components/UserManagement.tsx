@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { UserDto, getUsers, updateUserRole, updateUserTeacherName, deleteUser } from '../utils/api';
+import { UserDto, TeacherItemDto, getUsers, getTeachers, updateUserRole, updateUserTeacherName, deleteUser } from '../utils/api';
 import { Trash2, Loader2, ChevronDown } from 'lucide-react';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -26,13 +26,20 @@ export function UserManagement({ currentUserEmail }: UserManagementProps) {
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [editingTeacher, setEditingTeacher] = useState<number | null>(null);
   const [teacherNameInput, setTeacherNameInput] = useState('');
+  const [teachers, setTeachers] = useState<TeacherItemDto[]>([]);
 
   useEffect(() => {
     getUsers()
       .then(setUsers)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+    getTeachers()
+      .then(setTeachers)
+      .catch(() => { /* список викладачів необов'язковий — не блокуємо сторінку */ });
   }, []);
+
+  const teacherFullName = (t: TeacherItemDto) =>
+    `${t.surname} ${t.name} ${t.patronymic}`.replace(/\s+/g, ' ').trim();
 
   const handleRoleChange = async (user: UserDto, newRole: string) => {
     setActionLoading(user.id);
@@ -125,13 +132,21 @@ export function UserManagement({ currentUserEmail }: UserManagementProps) {
                   {user.role === 'Teacher' && (
                     editingTeacher === user.id ? (
                       <div className="flex items-center gap-1.5 mt-1">
-                        <input
+                        <select
                           autoFocus
                           value={teacherNameInput}
                           onChange={e => setTeacherNameInput(e.target.value)}
-                          placeholder="Прізвище Ім'я По-батькові"
-                          className="text-xs border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 w-52"
-                        />
+                          className="text-xs border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 w-52 bg-white"
+                        >
+                          <option value="">— не прив'язано —</option>
+                          {teacherNameInput && !teachers.some(t => teacherFullName(t) === teacherNameInput) && (
+                            <option value={teacherNameInput}>{teacherNameInput}</option>
+                          )}
+                          {teachers.map(t => {
+                            const full = teacherFullName(t);
+                            return <option key={t.teacherId.value} value={full}>{full}</option>;
+                          })}
+                        </select>
                         <button onClick={() => handleSaveTeacherName(user.id)} disabled={isLoading}
                           className="text-xs px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
                           {isLoading ? '...' : 'Зберегти'}

@@ -215,6 +215,7 @@ export interface WeekDayDto {
   dayName: string;
   isReplacement: boolean;
   replacesDay: string | null;
+  replacesWeekType: string | null;
   slots: ScheduleSlotDto[];
 }
 

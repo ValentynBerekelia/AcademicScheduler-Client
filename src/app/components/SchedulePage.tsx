@@ -217,6 +217,11 @@ function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin }: {
         {!isToday && day.isReplacement && day.replacesDay && (
           <p className="text-xs text-amber-700 mt-1 font-medium">
             відробіток за {DAY_NAMES[day.replacesDay] ?? day.replacesDay}
+            {day.replacesWeekType && (
+              <span className="block text-[10px] text-amber-600 font-normal">
+                ({WEEK_TYPE_LABELS[day.replacesWeekType] ?? day.replacesWeekType} тиждень)
+              </span>
+            )}
           </p>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { login, getMe, UserProfile } from '../utils/api';
+import { login, getMe, UserProfile, API_BASE_URL } from '../utils/api';
 const universityImg = '/university.jpg';
 
 interface LoginFormProps {
@@ -137,7 +137,7 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
           </div>
 
           <a
-            href="/api/auth/google/login"
+            href={`${API_BASE_URL}/auth/google/login`}
             className="w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-600 font-medium"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">

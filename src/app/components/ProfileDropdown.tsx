@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { LogOut, Users, Calendar, Mail, LayoutDashboard, RefreshCw, Unlink, Trash2, GraduationCap, Pencil, Check, X } from 'lucide-react';
-import { UserProfile, logout, disconnectCalendar, resyncCalendar, clearCalendar, updateMyGroup, getGroups, GroupItemDto } from '../utils/api';
+import { UserProfile, logout, disconnectCalendar, resyncCalendar, clearCalendar, updateMyGroup, getGroups, GroupItemDto, API_BASE_URL } from '../utils/api';
 
 interface ProfileDropdownProps {
   profile: UserProfile;
@@ -252,7 +252,7 @@ export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefr
               </>
             ) : (
               <a
-                href="/api/calendar/connect"
+                href={`${API_BASE_URL}/calendar/connect`}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-green-600 hover:bg-green-50 transition-colors"
               >
                 <Calendar size={15} />

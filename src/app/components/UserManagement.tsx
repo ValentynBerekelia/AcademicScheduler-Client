@@ -45,7 +45,9 @@ export function UserManagement({ currentUserEmail }: UserManagementProps) {
     setActionLoading(user.id);
     try {
       await updateUserRole(user.id, newRole);
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u));
+      setUsers(prev => prev.map(u => u.id === user.id
+        ? { ...u, role: newRole, group: newRole === 'Teacher' ? null : u.group }
+        : u));
     } catch (e: any) {
       setError(e.message);
     } finally {

@@ -106,7 +106,7 @@ export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefr
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <Users size={14} className="text-gray-400 shrink-0" />
                 <span>Група <span className="font-medium text-gray-900">{profile.group}</span></span>
-                {profile.role === 'User' && (
+                {profile.role !== 'Teacher' && (
                   <button
                     onClick={() => { setGroupInput(profile.group ?? ''); setEditingGroup(true); }}
                     className="ml-auto text-gray-400 hover:text-gray-600"
@@ -116,7 +116,7 @@ export function ProfileDropdown({ profile, onLogout, onAdminPanel, onProfileRefr
                   </button>
                 )}
               </div>
-            ) : profile.role === 'User' && !editingGroup ? (
+            ) : profile.role !== 'Teacher' && !editingGroup ? (
               <button
                 onClick={() => setEditingGroup(true)}
                 className="flex items-center gap-2 text-sm text-amber-600 hover:text-amber-700 w-full"

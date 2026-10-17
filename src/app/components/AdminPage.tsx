@@ -4,18 +4,20 @@ import { ProfileDropdown } from './ProfileDropdown';
 import { SaturdayManagement } from './SaturdayManagement';
 import { UserManagement } from './UserManagement';
 import { CancellationsManagement } from './CancellationsManagement';
-import { LayoutDashboard, Users, Calendar, XCircle, ChevronRight, DatabaseZap, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { ExamsManagement } from './ExamsManagement';
+import { LayoutDashboard, Users, Calendar, XCircle, ChevronRight, DatabaseZap, AlertTriangle, CheckCircle2, Loader2, GraduationCap } from 'lucide-react';
 
-type AdminSection = 'saturdays' | 'users' | 'cancellations' | 'reseed' | null;
+type AdminSection = 'saturdays' | 'users' | 'cancellations' | 'exams' | 'reseed' | null;
 
 interface AdminPageProps {
   profile: UserProfile;
   onLogout: () => void;
   onBack: () => void;
   onProfileRefresh?: () => void;
+  onCabinet?: () => void;
 }
 
-export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: AdminPageProps) {
+export function AdminPage({ profile, onLogout, onBack, onProfileRefresh, onCabinet }: AdminPageProps) {
   const [section, setSection] = useState<AdminSection>(null);
 
   const SECTIONS = [
@@ -45,6 +47,15 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
       color: 'text-red-600',
       bg: 'bg-red-50',
       border: 'border-red-200',
+    },
+    {
+      key: 'exams' as AdminSection,
+      icon: GraduationCap,
+      title: 'Екзамени та сесія',
+      description: 'Автоімпорт з fmi-schedule, ручне додавання та правки екзаменів',
+      color: 'text-rose-600',
+      bg: 'bg-rose-50',
+      border: 'border-rose-200',
     },
     {
       key: 'reseed' as AdminSection,
@@ -85,7 +96,7 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
             )}
           </div>
           <div className="flex items-center gap-2">
-            <ProfileDropdown profile={profile} onLogout={onLogout} onProfileRefresh={onProfileRefresh} />
+            <ProfileDropdown profile={profile} onLogout={onLogout} onProfileRefresh={onProfileRefresh} onCabinet={onCabinet} />
           </div>
         </div>
       </header>
@@ -111,6 +122,8 @@ export function AdminPage({ profile, onLogout, onBack, onProfileRefresh }: Admin
           <UserManagement currentUserEmail={profile.email} />
         ) : section === 'cancellations' ? (
           <CancellationsManagement />
+        ) : section === 'exams' ? (
+          <ExamsManagement />
         ) : section === 'reseed' ? (
           <ReseedSection />
         ) : null}

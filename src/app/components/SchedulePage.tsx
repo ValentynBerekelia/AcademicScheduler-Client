@@ -1,21 +1,25 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  getCurrentWeek, getGroups, getCurrentSemester, getCancellations,
+  getCurrentWeek, getGroups, getCurrentSemester, getCancellations, getExams,
   CurrentWeekDto, WeekDayDto, ScheduleSlotDto,
-  UserProfile, GroupItemDto, ClassCancellationDto,
+  UserProfile, GroupItemDto, ClassCancellationDto, ExamDto, UserSettingsDto,
 } from '../utils/api';
 import { Calendar, Clock, User, MapPin, ExternalLink, ChevronLeft, ChevronRight, Printer, DoorOpen } from 'lucide-react';
 import { ProfileDropdown } from './ProfileDropdown';
 import { FreeRoomsModal } from './FreeRoomsModal';
+import { ExamCountdownCard, SessionTimeline } from './ExamWidgets';
+import { useIsMobile } from './ui/use-mobile';
 
 interface SchedulePageProps {
   profile: UserProfile;
+  settings: UserSettingsDto;
   onLogout: () => void;
   onUnauthorized: () => void;
   onAdminPanel?: () => void;
   onProfileRefresh?: () => void;
   onTeacherSchedule?: () => void;
   onTeacherCabinet?: () => void;
+  onCabinet?: () => void;
 }
 
 type ViewMode = 'week' | 'semester';
@@ -54,9 +58,18 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+// Local calendar date (toISOString would give the UTC date, wrong after midnight in Kyiv)
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+function todayStr(): string {
+  return localDateStr(new Date());
+}
+
+const SHORT_DAY_NAMES: Record<string, string> = {
+  MONDAY: 'Пн', TUESDAY: 'Вт', WEDNESDAY: 'Ср', THURSDAY: 'Чт', FRIDAY: 'Пт', SATURDAY: 'Сб',
+};
 
 function getMondayOf(dateStr: string): string {
   const d = new Date(dateStr);
@@ -97,13 +110,16 @@ function parseTime(t: string): number {
   return h * 60 + m;
 }
 
-function SlotCard({ slot, isReplacement, isCancelled, onlineMeetingLink, isActive }: {
+function SlotCard({ slot, isReplacement, isCancelled, onlineMeetingLink, isActive, fluid }: {
   slot: ScheduleSlotDto;
   isReplacement: boolean;
   isCancelled?: boolean;
   onlineMeetingLink?: string | null;
   isActive?: boolean;
+  // Single-column (phone) layout: height follows content instead of the fixed grid row
+  fluid?: boolean;
 }) {
+  const heightClass = fluid ? 'min-h-[96px]' : 'h-[155px] overflow-hidden';
   const lessonType = slot.lessonType ?? '';
 
   if (isCancelled && !onlineMeetingLink) {
@@ -111,7 +127,7 @@ function SlotCard({ slot, isReplacement, isCancelled, onlineMeetingLink, isActiv
       ? `${slot.startTime} – ${slot.endTime}`
       : slot.className ? `Пара ${slot.className}` : null;
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 h-[155px] flex flex-col items-center justify-center gap-1 text-center px-3">
+      <div className={`rounded-lg border border-red-200 bg-red-50 ${heightClass} flex flex-col items-center justify-center gap-1 text-center px-3`}>
         <span className="text-xs font-bold text-red-600 uppercase tracking-wide">Скасовано</span>
         {timeLabel && <span className="text-xs text-red-400">{timeLabel}</span>}
         <span className="text-xs text-red-400 leading-snug opacity-80">{slot.subjectForSite}</span>
@@ -137,7 +153,7 @@ function SlotCard({ slot, isReplacement, isCancelled, onlineMeetingLink, isActiv
     : null;
 
   return (
-    <div className={`rounded-lg border p-3 space-y-1.5 h-[155px] overflow-hidden ${cardClass}`}>
+    <div className={`rounded-lg border p-3 space-y-1.5 ${heightClass} ${cardClass}`}>
       {isActive && (
         <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 rounded px-1.5 py-0.5 w-fit">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
@@ -190,12 +206,13 @@ function SlotCard({ slot, isReplacement, isCancelled, onlineMeetingLink, isActiv
   );
 }
 
-function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin }: {
+function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin, fluid }: {
   day: WeekDayDto;
   allClassNames: string[];
   cancellationMap: Map<number, string | null>; // semesterClassId -> meetingLink (null=cancelled)
   isToday: boolean;
   nowMin: number;
+  fluid?: boolean;
 }) {
   const dayLabel = DAY_NAMES[day.dayName] ?? day.dayName;
   const slotByClass = new Map(day.slots.map(s => [s.className ?? String(s.semesterClassId), s]));
@@ -228,7 +245,7 @@ function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin }: {
       <div className="p-2 space-y-2">
         {allClassNames.map(cn => {
           const slot = slotByClass.get(cn);
-          if (!slot) return <div key={cn} className="h-[155px]" />;
+          if (!slot) return fluid ? null : <div key={cn} className="h-[155px]" />;
           const cancellation = cancellationMap.has(slot.semesterClassId)
             ? cancellationMap.get(slot.semesterClassId)
             : undefined;
@@ -236,7 +253,7 @@ function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin }: {
           const onlineMeetingLink = (cancellation != null && cancellation !== undefined) ? cancellation : undefined;
           const isActive = isToday && !!slot.startTime && !!slot.endTime
             && nowMin >= parseTime(slot.startTime) && nowMin <= parseTime(slot.endTime);
-          return <SlotCard key={slot.id} slot={slot} isReplacement={day.isReplacement} isCancelled={isCancelled} onlineMeetingLink={onlineMeetingLink} isActive={isActive} />;
+          return <SlotCard key={slot.id} slot={slot} isReplacement={day.isReplacement} isCancelled={isCancelled} onlineMeetingLink={onlineMeetingLink} isActive={isActive} fluid={fluid} />;
         })}
       </div>
     </div>
@@ -260,8 +277,15 @@ function WeekGrid({ week, label, cancellations, now }: {
     cancelledByDate.get(c.date)!.set(c.semesterClassId, c.meetingLink ?? null);
   }
 
-  const todayDateStr = now.toISOString().slice(0, 10);
+  const todayDateStr = localDateStr(now);
   const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  // Phones get one day at a time: today if it is in this week, otherwise the first day
+  const isMobile = useIsMobile();
+  const defaultDay = (week.days.find(d => d.date === todayDateStr) ?? week.days[0])?.date;
+  const [mobileDay, setMobileDay] = useState(defaultDay);
+  useEffect(() => setMobileDay(defaultDay), [week.weekStart, defaultDay]);
+  const selectedDay = week.days.find(d => d.date === mobileDay) ?? week.days[0];
 
   return (
     <div className="space-y-2">
@@ -280,6 +304,44 @@ function WeekGrid({ week, label, cancellations, now }: {
           <span className="text-sm text-gray-400">{formatDate(week.weekStart)} — {formatDate(week.weekEnd)}</span>
         </div>
       </div>
+      {isMobile && selectedDay ? (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex border-b border-gray-200">
+            {week.days.map(day => {
+              const active = day.date === selectedDay.date;
+              const isToday = day.date === todayDateStr;
+              return (
+                <button
+                  key={day.date}
+                  onClick={() => setMobileDay(day.date)}
+                  className={`flex-1 py-2 flex flex-col items-center gap-0.5 text-xs transition-colors ${
+                    active ? 'bg-emerald-600 text-white' : day.isReplacement ? 'bg-amber-50 text-gray-700' : 'text-gray-600'
+                  }`}
+                >
+                  <span className="font-semibold">{SHORT_DAY_NAMES[day.dayName] ?? day.dayName.slice(0, 2)}</span>
+                  <span className={active ? 'text-emerald-100' : 'text-gray-400'}>{Number(day.date.slice(8))}</span>
+                  <span className={`w-1 h-1 rounded-full ${
+                    isToday ? (active ? 'bg-white' : 'bg-emerald-500') : 'bg-transparent'
+                  }`} />
+                </button>
+              );
+            })}
+          </div>
+          {selectedDay.slots.length === 0 ? (
+            <p className="p-8 text-center text-sm text-gray-400">Пар немає</p>
+          ) : (
+            <DayColumn
+              day={selectedDay}
+              allClassNames={[...new Set(selectedDay.slots.map(s => s.className ?? String(s.semesterClassId)))]
+                .sort((a, b) => Number(a) - Number(b))}
+              cancellationMap={cancelledByDate.get(selectedDay.date) ?? new Map()}
+              isToday={selectedDay.date === todayDateStr}
+              nowMin={nowMin}
+              fluid
+            />
+          )}
+        </div>
+      ) : (
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="flex">
           {week.days.map(day => (
@@ -294,22 +356,23 @@ function WeekGrid({ week, label, cancellations, now }: {
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }
 
 const STORAGE_GROUP_KEY = 'schedule_selected_group';
-const STORAGE_VIEW_KEY = 'schedule_view_mode';
 
-export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, onProfileRefresh, onTeacherSchedule, onTeacherCabinet }: SchedulePageProps) {
+export function SchedulePage({ profile, settings, onLogout, onUnauthorized, onAdminPanel, onProfileRefresh, onTeacherSchedule, onTeacherCabinet, onCabinet }: SchedulePageProps) {
   const now = useNow();
   const [groups, setGroups] = useState<GroupItemDto[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>(
     () => profile.group || localStorage.getItem(STORAGE_GROUP_KEY) || ''
   );
-  const [viewMode, setViewMode] = useState<ViewMode>(
-    () => (localStorage.getItem(STORAGE_VIEW_KEY) as ViewMode) ?? 'week'
-  );
+  // Opens in the view chosen in the personal cabinet
+  const [viewMode, setViewMode] = useState<ViewMode>(settings.defaultView);
+  const [exams, setExams] = useState<ExamDto[]>([]);
+  const showExamWidgets = settings.showExamCountdown || settings.showSessionTimeline;
   const [currentDate, setCurrentDate] = useState<string>(todayStr);
 
   const [week, setWeek] = useState<CurrentWeekDto | null>(null);
@@ -331,10 +394,11 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
     if (selectedGroup) localStorage.setItem(STORAGE_GROUP_KEY, selectedGroup);
   }, [selectedGroup]);
 
-  // persist view mode
+  // exams of the group on screen (for the countdown / session widgets)
   useEffect(() => {
-    localStorage.setItem(STORAGE_VIEW_KEY, viewMode);
-  }, [viewMode]);
+    if (!selectedGroup || !showExamWidgets) { setExams([]); return; }
+    getExams(selectedGroup).then(setExams).catch(() => setExams([]));
+  }, [selectedGroup, showExamWidgets]);
 
   const loadWeek = useCallback(async () => {
     if (!selectedGroup) return;
@@ -380,8 +444,8 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
     : '';
 
   const todayClassInfo = (() => {
-    if (!week || viewMode !== 'week') return null;
-    const todayDateStr = now.toISOString().slice(0, 10);
+    if (!settings.showCurrentClass || !week || viewMode !== 'week') return null;
+    const todayDateStr = localDateStr(now);
     const todayDay = week.days.find(d => d.date === todayDateStr);
     if (!todayDay) return null;
     const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -404,7 +468,7 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-900">Розклад занять</h1>
           <div className="flex items-center gap-2">
-            <ProfileDropdown profile={profile} onLogout={onLogout} onAdminPanel={onAdminPanel} onProfileRefresh={onProfileRefresh} onTeacherCabinet={onTeacherCabinet} />
+            <ProfileDropdown profile={profile} onLogout={onLogout} onAdminPanel={onAdminPanel} onProfileRefresh={onProfileRefresh} onTeacherCabinet={onTeacherCabinet} onCabinet={onCabinet} />
           </div>
         </div>
       </header>
@@ -515,6 +579,13 @@ export function SchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, 
       </div>
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {exams.length > 0 && (
+          <div className="space-y-4 mb-6 print:hidden">
+            {settings.showExamCountdown && <ExamCountdownCard exams={exams} />}
+            {settings.showSessionTimeline && <SessionTimeline exams={exams} />}
+          </div>
+        )}
+
         {loading && (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
             Завантаження...

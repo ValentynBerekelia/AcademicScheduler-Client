@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { register, getMe, UserProfile } from '../utils/api';
+import { useState, useEffect } from 'react';
+import { register, getMe, getGroups, UserProfile, GroupItemDto } from '../utils/api';
 const universityImg = '/university.jpg';
 
 interface RegisterFormProps {
@@ -14,6 +14,11 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
   const [group, setGroup] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [groups, setGroups] = useState<GroupItemDto[]>([]);
+
+  useEffect(() => {
+    getGroups().then(setGroups).catch(() => setError('Не вдалося завантажити список груп'));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,10 +116,12 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Група</label>
-              <input type="text" value={group} onChange={(e) => setGroup(e.target.value)}
-                placeholder="Наприклад: КІ-21"
+              <select value={group} onChange={(e) => setGroup(e.target.value)}
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none transition text-sm bg-gray-50 focus:bg-white"
-                required />
+                required>
+                <option value="">{groups.length ? '— Оберіть групу —' : 'Завантаження груп...'}</option>
+                {groups.map(g => <option key={g.id} value={g.title}>{g.title}</option>)}
+              </select>
             </div>
 
             {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">{error}</div>}

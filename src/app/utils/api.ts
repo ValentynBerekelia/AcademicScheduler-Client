@@ -473,6 +473,139 @@ export async function reseedDatabase(): Promise<void> {
   }
 }
 
+// ── Exams ─────────────────────────────────────────────────────────────────────
+
+export type ExamType = 'Exam' | 'Credit' | 'Consultation';
+
+export interface ExamDto {
+  id: string;
+  groupTitle: string;
+  subject: string;
+  type: ExamType;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  teacherName: string | null;
+  room: string | null;
+  note: string | null;
+  isImported: boolean;
+  isEdited: boolean;
+  isDeleted: boolean;
+}
+
+export interface ExamRequest {
+  groupTitle: string;
+  subject: string;
+  type: ExamType;
+  date: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  teacherName?: string | null;
+  room?: string | null;
+  note?: string | null;
+}
+
+export interface ExamSyncResult {
+  semestersScanned: number;
+  sessionSemesterIds: number[];
+  added: number;
+  updated: number;
+  removed: number;
+  remindersSent: number;
+}
+
+export async function getExams(group?: string): Promise<ExamDto[]> {
+  const query = group ? `?group=${encodeURIComponent(group)}` : '';
+  const r = await fetch(`${API_BASE_URL}/exams${query}`, { credentials: 'include' });
+  if (r.status === 401) throw new Error('UNAUTHORIZED');
+  if (!r.ok) throw new Error('Failed to load exams');
+  return r.json();
+}
+
+export async function adminGetExams(group?: string, includeDeleted = false): Promise<ExamDto[]> {
+  const params = new URLSearchParams();
+  if (group) params.set('group', group);
+  if (includeDeleted) params.set('includeDeleted', 'true');
+  const r = await fetch(`${API_BASE_URL}/admin/exams?${params}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Failed to load exams');
+  return r.json();
+}
+
+async function sendExam(url: string, method: string, req: ExamRequest): Promise<ExamDto> {
+  const r = await fetch(url, {
+    method,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!r.ok) throw new Error(await r.text() || 'Помилка збереження');
+  return r.json();
+}
+
+export function adminCreateExam(req: ExamRequest): Promise<ExamDto> {
+  return sendExam(`${API_BASE_URL}/admin/exams`, 'POST', req);
+}
+
+export function adminUpdateExam(id: string, req: ExamRequest): Promise<ExamDto> {
+  return sendExam(`${API_BASE_URL}/admin/exams/${id}`, 'PUT', req);
+}
+
+export async function adminDeleteExam(id: string): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/admin/exams/${id}`, { method: 'DELETE', credentials: 'include' });
+  if (!r.ok) throw new Error('Помилка видалення');
+}
+
+export async function adminRestoreExam(id: string): Promise<void> {
+  const r = await fetch(`${API_BASE_URL}/admin/exams/${id}/restore`, { method: 'POST', credentials: 'include' });
+  if (!r.ok) throw new Error('Помилка відновлення');
+}
+
+export async function adminSyncExams(): Promise<ExamSyncResult> {
+  const r = await fetch(`${API_BASE_URL}/admin/exams/sync`, { method: 'POST', credentials: 'include' });
+  if (!r.ok) throw new Error(await r.text() || 'Помилка синхронізації');
+  return r.json();
+}
+
+// ── User settings ─────────────────────────────────────────────────────────────
+
+export interface UserSettingsDto {
+  showExamCountdown: boolean;
+  showSessionTimeline: boolean;
+  showCurrentClass: boolean;
+  defaultView: 'week' | 'semester';
+  notifyReplacements: boolean;
+  notifyCancellations: boolean;
+  examReminderDays: 0 | 1 | 3 | 7;
+}
+
+export const DEFAULT_SETTINGS: UserSettingsDto = {
+  showExamCountdown: true,
+  showSessionTimeline: true,
+  showCurrentClass: true,
+  defaultView: 'week',
+  notifyReplacements: true,
+  notifyCancellations: true,
+  examReminderDays: 3,
+};
+
+export async function getMySettings(): Promise<UserSettingsDto> {
+  const r = await fetch(`${API_BASE_URL}/me/settings`, { credentials: 'include' });
+  if (r.status === 401) throw new Error('UNAUTHORIZED');
+  if (!r.ok) throw new Error('Failed to load settings');
+  return r.json();
+}
+
+export async function updateMySettings(settings: UserSettingsDto): Promise<UserSettingsDto> {
+  const r = await fetch(`${API_BASE_URL}/me/settings`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+  if (!r.ok) throw new Error(await r.text() || 'Помилка збереження налаштувань');
+  return r.json();
+}
+
 // ── Free Rooms ────────────────────────────────────────────────────────────────
 
 export interface FreeRoomsDto {

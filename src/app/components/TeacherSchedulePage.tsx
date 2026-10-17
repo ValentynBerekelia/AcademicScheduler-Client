@@ -15,6 +15,7 @@ interface TeacherSchedulePageProps {
   onAdminPanel?: () => void;
   onProfileRefresh?: () => void;
   onBack?: () => void;
+  onCabinet?: () => void;
   personalMode?: boolean;
 }
 
@@ -560,7 +561,7 @@ function CancellationsPanel({ semesterId, teacherName, weeks, onChanged }: Cance
 
 const STORAGE_TEACHER_KEY = 'schedule_selected_teacher';
 
-export function TeacherSchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, onProfileRefresh, onBack, personalMode }: TeacherSchedulePageProps) {
+export function TeacherSchedulePage({ profile, onLogout, onUnauthorized, onAdminPanel, onProfileRefresh, onBack, onCabinet, personalMode }: TeacherSchedulePageProps) {
   const isPersonal = personalMode === true ? !!profile.teacherName : false;
   const [teachers, setTeachers] = useState<TeacherItemDto[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<string>(
@@ -659,6 +660,7 @@ export function TeacherSchedulePage({ profile, onLogout, onUnauthorized, onAdmin
               onLogout={onLogout}
               onAdminPanel={onAdminPanel}
               onProfileRefresh={onProfileRefresh}
+              onCabinet={onCabinet}
             />
           </div>
         </div>

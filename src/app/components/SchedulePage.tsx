@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  getCurrentWeek, getGroups, getCurrentSemester, getCancellations, getExams,
+  getCurrentWeek, getGroups, getCurrentSemester, getCancellations, getExams, getSubjectAliases, aliasMap,
   CurrentWeekDto, WeekDayDto, ScheduleSlotDto,
   UserProfile, GroupItemDto, ClassCancellationDto, ExamDto, UserSettingsDto,
 } from '../utils/api';
-import { Calendar, Clock, User, MapPin, ExternalLink, ChevronLeft, ChevronRight, Printer, DoorOpen } from 'lucide-react';
+import { Calendar, Clock, ChevronLeft, ChevronRight, Printer, DoorOpen } from 'lucide-react';
 import { ProfileDropdown } from './ProfileDropdown';
 import { FreeRoomsModal } from './FreeRoomsModal';
 import { ExamCountdownCard, SessionTimeline } from './ExamWidgets';
 import { useIsMobile } from './ui/use-mobile';
+import { SlotCard, ScheduleDisplayContext, displayOptionsFrom, useScheduleDisplay, cardHeight } from './ScheduleDisplay';
 
 interface SchedulePageProps {
   profile: UserProfile;
@@ -39,18 +40,6 @@ const WEEK_TYPE_LABELS: Record<string, string> = {
 };
 
 
-const LESSON_TYPE_BADGE: Record<string, string> = {
-  'Лекція':      'bg-emerald-100 text-emerald-700',
-  'LECTURE':     'bg-emerald-100 text-emerald-700',
-  'Практика':    'bg-blue-100 text-blue-700',
-  'PRACTICE':    'bg-blue-100 text-blue-700',
-  'Лабораторна': 'bg-red-100 text-red-700',
-  'LABORATORY':  'bg-red-100 text-red-700',
-  'Лаб':         'bg-red-100 text-red-700',
-  'LAB':         'bg-red-100 text-red-700',
-  'Семінар':     'bg-orange-100 text-orange-700',
-  'SEMINAR':     'bg-orange-100 text-orange-700',
-};
 
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr);
@@ -110,109 +99,14 @@ function parseTime(t: string): number {
   return h * 60 + m;
 }
 
-function SlotCard({ slot, isReplacement, isCancelled, onlineMeetingLink, isActive, fluid }: {
-  slot: ScheduleSlotDto;
-  isReplacement: boolean;
-  isCancelled?: boolean;
-  onlineMeetingLink?: string | null;
-  isActive?: boolean;
-  // Single-column (phone) layout: height follows content instead of the fixed grid row
-  fluid?: boolean;
-}) {
-  const heightClass = fluid ? 'min-h-[96px]' : 'h-[155px] overflow-hidden';
-  const lessonType = slot.lessonType ?? '';
-
-  if (isCancelled && !onlineMeetingLink) {
-    const timeLabel = slot.startTime && slot.endTime
-      ? `${slot.startTime} – ${slot.endTime}`
-      : slot.className ? `Пара ${slot.className}` : null;
-    return (
-      <div className={`rounded-lg border border-red-200 bg-red-50 ${heightClass} flex flex-col items-center justify-center gap-1 text-center px-3`}>
-        <span className="text-xs font-bold text-red-600 uppercase tracking-wide">Скасовано</span>
-        {timeLabel && <span className="text-xs text-red-400">{timeLabel}</span>}
-        <span className="text-xs text-red-400 leading-snug opacity-80">{slot.subjectForSite}</span>
-      </div>
-    );
-  }
-
-  // Online override: use the cancellation's meeting link instead of the slot's
-  const effectiveLink = onlineMeetingLink ?? slot.linkToMeeting;
-
-  const cardClass = isActive
-    ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-300 shadow-sm'
-    : onlineMeetingLink ? 'bg-blue-50 border-blue-200 text-gray-800'
-    : isReplacement ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200 text-gray-800';
-  const badgeClass = isReplacement
-    ? 'bg-amber-100 text-amber-700'
-    : (LESSON_TYPE_BADGE[lessonType] ?? 'bg-gray-100 text-gray-600');
-
-  const timeLabel = slot.startTime && slot.endTime
-    ? `${slot.startTime} – ${slot.endTime}`
-    : slot.className
-    ? `Пара ${slot.className}`
-    : null;
-
-  return (
-    <div className={`rounded-lg border p-3 space-y-1.5 ${heightClass} ${cardClass}`}>
-      {isActive && (
-        <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 rounded px-1.5 py-0.5 w-fit">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-          Зараз
-        </div>
-      )}
-      {timeLabel && (
-        <div className="flex items-center gap-1.5 text-xs font-semibold">
-          <Clock size={11} className="shrink-0" />
-          <span>{timeLabel}</span>
-          {slot.className && slot.startTime && (
-            <span className="ml-auto opacity-60">#{slot.className}</span>
-          )}
-        </div>
-      )}
-      <p className="text-sm font-semibold leading-snug">{slot.subjectForSite || '—'}</p>
-      {lessonType && (
-        <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${badgeClass}`}>
-          {lessonType}
-        </span>
-      )}
-      {slot.teacherFullName && (
-        <div className="flex items-center gap-1 text-xs opacity-75">
-          <User size={11} className="shrink-0" />
-          <span>{slot.teacherFullName}</span>
-        </div>
-      )}
-      {slot.roomName && (
-        <div className="flex items-center gap-1 text-xs opacity-75">
-          <MapPin size={11} className="shrink-0" />
-          <span>Ауд. {slot.roomName}</span>
-        </div>
-      )}
-      {effectiveLink && (
-        <a
-          href={effectiveLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium hover:opacity-80 ${
-            onlineMeetingLink
-              ? 'bg-blue-100 text-blue-700'
-              : 'text-blue-600'
-          }`}
-        >
-          <ExternalLink size={10} className="shrink-0" />
-          {onlineMeetingLink ? 'Онлайн' : 'Приєднатись онлайн'}
-        </a>
-      )}
-    </div>
-  );
-}
-
-function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin, fluid }: {
+function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin, cellHeight }: {
   day: WeekDayDto;
   allClassNames: string[];
   cancellationMap: Map<number, string | null>; // semesterClassId -> meetingLink (null=cancelled)
   isToday: boolean;
   nowMin: number;
-  fluid?: boolean;
+  // Fixed card height in the week grid; undefined on phones (cards follow their content)
+  cellHeight?: number;
 }) {
   const dayLabel = DAY_NAMES[day.dayName] ?? day.dayName;
   const slotByClass = new Map(day.slots.map(s => [s.className ?? String(s.semesterClassId), s]));
@@ -245,7 +139,7 @@ function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin, fluid
       <div className="p-2 space-y-2">
         {allClassNames.map(cn => {
           const slot = slotByClass.get(cn);
-          if (!slot) return fluid ? null : <div key={cn} className="h-[155px]" />;
+          if (!slot) return cellHeight ? <div key={cn} style={{ height: cellHeight }} /> : null;
           const cancellation = cancellationMap.has(slot.semesterClassId)
             ? cancellationMap.get(slot.semesterClassId)
             : undefined;
@@ -253,7 +147,7 @@ function DayColumn({ day, allClassNames, cancellationMap, isToday, nowMin, fluid
           const onlineMeetingLink = (cancellation != null && cancellation !== undefined) ? cancellation : undefined;
           const isActive = isToday && !!slot.startTime && !!slot.endTime
             && nowMin >= parseTime(slot.startTime) && nowMin <= parseTime(slot.endTime);
-          return <SlotCard key={slot.id} slot={slot} isReplacement={day.isReplacement} isCancelled={isCancelled} onlineMeetingLink={onlineMeetingLink} isActive={isActive} fluid={fluid} />;
+          return <SlotCard key={slot.id} slot={slot} isReplacement={day.isReplacement} isCancelled={isCancelled} onlineMeetingLink={onlineMeetingLink} isActive={isActive} height={cellHeight} />;
         })}
       </div>
     </div>
@@ -279,6 +173,11 @@ function WeekGrid({ week, label, cancellations, now }: {
 
   const todayDateStr = localDateStr(now);
   const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  // Reserve a row for «Приєднатись онлайн» only in weeks that have a meeting link somewhere
+  const withLinkRow = week.days.some(d => d.slots.some(sl => !!sl.linkToMeeting))
+    || (cancellations ?? []).some(c => !!c.meetingLink);
+  const gridCellHeight = cardHeight(useScheduleDisplay(), withLinkRow);
 
   // Phones get one day at a time: today if it is in this week, otherwise the first day
   const isMobile = useIsMobile();
@@ -337,7 +236,6 @@ function WeekGrid({ week, label, cancellations, now }: {
               cancellationMap={cancelledByDate.get(selectedDay.date) ?? new Map()}
               isToday={selectedDay.date === todayDateStr}
               nowMin={nowMin}
-              fluid
             />
           )}
         </div>
@@ -352,6 +250,7 @@ function WeekGrid({ week, label, cancellations, now }: {
               cancellationMap={cancelledByDate.get(day.date) ?? new Map()}
               isToday={day.date === todayDateStr}
               nowMin={nowMin}
+              cellHeight={gridCellHeight}
             />
           ))}
         </div>
@@ -372,6 +271,12 @@ export function SchedulePage({ profile, settings, onLogout, onUnauthorized, onAd
   // Opens in the view chosen in the personal cabinet
   const [viewMode, setViewMode] = useState<ViewMode>(settings.defaultView);
   const [exams, setExams] = useState<ExamDto[]>([]);
+  const [aliases, setAliases] = useState<Map<string, string>>(new Map());
+  const displayOptions = useMemo(() => displayOptionsFrom(settings, aliases), [settings, aliases]);
+
+  useEffect(() => {
+    getSubjectAliases().then(items => setAliases(aliasMap(items))).catch(() => {});
+  }, []);
   const showExamWidgets = settings.showExamCountdown || settings.showSessionTimeline;
   const [currentDate, setCurrentDate] = useState<string>(todayStr);
 
@@ -460,6 +365,7 @@ export function SchedulePage({ profile, settings, onLogout, onUnauthorized, onAd
   })();
 
   return (
+    <ScheduleDisplayContext.Provider value={displayOptions}>
     <div className="min-h-screen bg-gray-50">
       {showFreeRooms && (
         <FreeRoomsModal onClose={() => setShowFreeRooms(false)} initialDate={currentDate} />
@@ -614,5 +520,6 @@ export function SchedulePage({ profile, settings, onLogout, onUnauthorized, onAd
         )}
       </div>
     </div>
+    </ScheduleDisplayContext.Provider>
   );
 }

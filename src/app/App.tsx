@@ -6,6 +6,7 @@ import { AdminPage } from './components/AdminPage';
 import { TeacherSchedulePage } from './components/TeacherSchedulePage';
 import { CabinetPage } from './components/CabinetPage';
 import { getMe, getMySettings, UserProfile, UserSettingsDto, DEFAULT_SETTINGS } from './utils/api';
+import { applyTheme, storedTheme } from './utils/theme';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -15,8 +16,15 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<'schedule' | 'admin' | 'teachers' | 'cabinet' | 'profile'>('schedule');
 
-  // Settings failing to load must not block the app — fall back to defaults
-  const loadSettings = () => getMySettings().then(setSettings).catch(() => setSettings(DEFAULT_SETTINGS));
+  // Settings failing to load must not block the app — fall back to defaults (keeping this device's theme)
+  const loadSettings = () => getMySettings()
+    .then(setSettings)
+    .catch(() => setSettings({ ...DEFAULT_SETTINGS, theme: storedTheme() }));
+
+  // The signed-in user's theme follows their saved setting; signed out, the device keeps its last theme
+  useEffect(() => {
+    if (isAuthenticated) applyTheme(settings.theme);
+  }, [isAuthenticated, settings.theme]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -54,7 +62,7 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('userProfile');
     setProfile(null);
-    setSettings(DEFAULT_SETTINGS);
+    setSettings({ ...DEFAULT_SETTINGS, theme: storedTheme() });
     setIsAuthenticated(false);
     setShowLogin(true);
     setPage('schedule');

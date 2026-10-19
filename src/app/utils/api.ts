@@ -573,6 +573,15 @@ export interface UserSettingsDto {
   showSessionTimeline: boolean;
   showCurrentClass: boolean;
   defaultView: 'week' | 'semester';
+  theme: 'light' | 'dark' | 'system';
+  scheduleTextSize: 'sm' | 'md' | 'lg';
+  showTeacher: boolean;
+  showRoom: boolean;
+  showLessonType: boolean;
+  shortTeacherNames: boolean;
+  translateLessonTypes: boolean;
+  scheduleFont: 'default' | 'serif' | 'rounded' | 'mono';
+  subjectWeight: 'normal' | 'semibold' | 'bold';
   notifyReplacements: boolean;
   notifyCancellations: boolean;
   examReminderDays: 0 | 1 | 3 | 7;
@@ -583,6 +592,15 @@ export const DEFAULT_SETTINGS: UserSettingsDto = {
   showSessionTimeline: true,
   showCurrentClass: true,
   defaultView: 'week',
+  theme: 'system',
+  scheduleTextSize: 'md',
+  showTeacher: true,
+  showRoom: true,
+  showLessonType: true,
+  shortTeacherNames: false,
+  translateLessonTypes: true,
+  scheduleFont: 'default',
+  subjectWeight: 'semibold',
   notifyReplacements: true,
   notifyCancellations: true,
   examReminderDays: 3,
@@ -604,6 +622,40 @@ export async function updateMySettings(settings: UserSettingsDto): Promise<UserS
   });
   if (!r.ok) throw new Error(await r.text() || 'Помилка збереження налаштувань');
   return r.json();
+}
+
+// ── Subject aliases (user's own subject names) ───────────────────────────────
+
+export interface SubjectAliasDto {
+  subject: string;
+  alias: string;
+}
+
+export async function getSubjectAliases(): Promise<SubjectAliasDto[]> {
+  const r = await fetch(`${API_BASE_URL}/me/subject-aliases`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Failed to load subject names');
+  return r.json();
+}
+
+export async function saveSubjectAliases(items: SubjectAliasDto[]): Promise<SubjectAliasDto[]> {
+  const r = await fetch(`${API_BASE_URL}/me/subject-aliases`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(items),
+  });
+  if (!r.ok) throw new Error(await r.text() || 'Помилка збереження назв');
+  return r.json();
+}
+
+export async function getGroupSubjects(group: string): Promise<string[]> {
+  const r = await fetch(`${API_BASE_URL}/schedule/subjects?group=${encodeURIComponent(group)}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Failed to load subjects');
+  return r.json();
+}
+
+export function aliasMap(items: SubjectAliasDto[]): Map<string, string> {
+  return new Map(items.map(i => [i.subject, i.alias]));
 }
 
 // ── Free Rooms ────────────────────────────────────────────────────────────────
